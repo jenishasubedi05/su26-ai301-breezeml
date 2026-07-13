@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Jenisha Subedi
 **Issue:** https://github.com/venomez-viper/breezeml/issues/10
-**Status:** Phase I COMPLETE
+**Status:** Phase II COMPLETED
 
 ---
 
@@ -40,19 +40,28 @@ The path is written into the generated script as-is, with raw backslashes, which
 ## Reproduction Process
 
 ### Environment Setup
+cloned my fork (`jenishasubedi05/breezeml`), ran `pip install -e ".[dev]"` to install BreezeML and dev dependencies (pytest, ruff, etc.) locally on Windows. Confirmed the existing test suite passes before making any changes:
+python -m pytest tests/ -v
+Result: 51 passed, 4 skipped (skips are optional XGBoost/LightGBM tests, not installed).
 
-*Not yet started planned for Phase II.* I will clone my fork (`jenishasubedi05/breezeml`), install BreezeML locally per `CONTRIBUTING.md` (`pip install -e ".[dev]"`), and confirm the existing test suite passes with `pytest tests/ -v` before making changes.
+One setup note: `pytest` wasn't recognized directly from PowerShell since its install location wasn't on PATH. Worked around it by running `python -m pytest` instead of `pytest` directly.
 
-### Steps to Reproduce (planned)
+Working branch: https://github.com/jenishasubedi05/breezeml/tree/fix-issue-10
 
-1. Train a simple model using `breezeml.fit()` on a dataset loaded from a path containing a space or Windows-style separators
-2. Call `model.export("train.py", data_path=...)` with a Windows-style path
-3. Inspect the generated `train.py` to confirm the path is written with unescaped backslashes
-4. Attempt to run the generated script and confirm it fails or produces an incorrect path
+### Steps to Reproduce
+
+1. Train a model: `model = fit(datasets.iris(), "species")`
+2. Export it with a Windows-style data path: `export(model, "train.py", data_path=r"C:\Users\College\data.csv")`
+3. Open the generated `train.py` and find the line: `DATA_PATH = "C:\Users\College\data.csv"`
+4. Run `python train.py`
+5. **Expected:** Script loads the CSV and trains normally
+6. **Actual:** `SyntaxError: (unicode error) 'unicodeescape' codec can't decode bytes in position 2-3: truncated \UXXXXXXXX escape` — the generated script fails to even parse
+
+Reproduced consistently (twice) with the same error.
 
 ### Reproduction Evidence
 
-*To be completed in Phase II, once the environment is set up and the bug is reproduced locally.*
+Branch with reproduction script (`repro.py`): https://github.com/jenishasubedi05/breezeml/tree/fix-issue-10
 
 ---
 
@@ -60,13 +69,19 @@ The path is written into the generated script as-is, with raw backslashes, which
 
 ### Analysis
 
-*To be completed in Phase II, after reproducing the bug and reading the relevant `export()` implementation.*
+Root cause is in `breezeml/export.py`, in `export_code()`:
 
-### Proposed Solution (initial plan, subject to revision after reproduction)
+```python
+lines.append(f'DATA_PATH = "{data_path}"')
+```
 
-1. Locate the path-writing logic inside `Pipeline.export()`
-2. Normalize the path before it is embedded in the generated script  e.g. using `pathlib.Path(...).as_posix()` or converting to a raw string
-3. Extend `tests/test_v040_features.py` to add a case that verifies exported scripts are valid Python on Windows-style paths
+This drops the raw `data_path` string directly into the generated Python source wrapped in double quotes. Windows paths contain backslashes, which Python interprets as escape characters inside string literals. Sequences like `\U` are parsed as the start of an (invalid) 8-digit unicode escape, causing a `SyntaxError` before the exported script can even run.
+
+### Proposed Solution
+
+1. In `export_code()`, stop manually wrapping `data_path` in quotes with an f-string
+2. Use `repr(data_path)` instead of `f'"{data_path}"'` — `repr()` correctly escapes backslashes so the resulting string literal is always valid Python, regardless of OS
+3. Add a test in `tests/test_v040_features.py` that exports with a Windows-style path (`r"C:\Users\name\data.csv"`) and confirms the generated script parses and runs without error
 
 ### Implementation Plan
 
@@ -75,13 +90,13 @@ The path is written into the generated script as-is, with raw backslashes, which
 **Match:** Follow the existing pattern in `export()` for how other pipeline attributes (imputers, scaler, encoder, seed) are serialized into the generated script.
 
 **Plan:**
-1. Reproduce the issue locally with a Windows-style path
-2. Identify the exact line(s) in `export()` responsible for writing the path
-3. Normalize the path before writing
-4. Add/extend a test confirming the exported script is valid regardless of path format
+1. Reproduce the issue locally with a Windows-style path (done — confirmed above)
+2. Identify the exact line in `export()` responsible (done — `lines.append(f'DATA_PATH = "{data_path}"')`)
+3. Normalize the path before writing, using `repr(data_path)` instead of manual quote-wrapping
+4. Add/extend a test confirming exported scripts are valid Python for Windows-style paths
 5. Run the full test suite and `ruff check .` before submitting
 
-**Implement:** *Not yet started Phase III.*
+**Implement:** *Not yet started planned for Phase III.*
 
 **Review:** Will follow `CONTRIBUTING.md`: pass CI, include tests, follow existing docstring style.
 
