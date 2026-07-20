@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Jenisha Subedi
 **Issue:** https://github.com/venomez-viper/breezeml/issues/10
-**Status:** Phase II COMPLETED
+**Status:** Phase III COMPLETED
 
 ---
 
@@ -40,8 +40,7 @@ The path is written into the generated script as-is, with raw backslashes, which
 ## Reproduction Process
 
 ### Environment Setup
-cloned my fork (`jenishasubedi05/breezeml`), ran `pip install -e ".[dev]"` to install BreezeML and dev dependencies (pytest, ruff, etc.) locally on Windows. Confirmed the existing test suite passes before making any changes:
-python -m pytest tests/ -v
+Cloned my fork (`jenishasubedi05/breezeml`), ran `pip install -e ".[dev]"` to install BreezeML and dev dependencies (pytest, ruff, etc.) locally on Windows. Confirmed the existing test suite passes before making any changes:
 Result: 51 passed, 4 skipped (skips are optional XGBoost/LightGBM tests, not installed).
 
 One setup note: `pytest` wasn't recognized directly from PowerShell since its install location wasn't on PATH. Worked around it by running `python -m pytest` instead of `pytest` directly.
@@ -96,23 +95,45 @@ This drops the raw `data_path` string directly into the generated Python source 
 4. Add/extend a test confirming exported scripts are valid Python for Windows-style paths
 5. Run the full test suite and `ruff check .` before submitting
 
-**Implement:** *Not yet started planned for Phase III.*
+**Implement:** Fix implemented and pushed: https://github.com/jenishasubedi05/breezeml/tree/fix-issue-10 (commit `eb19684`)
 
-**Review:** Will follow `CONTRIBUTING.md`: pass CI, include tests, follow existing docstring style.
+**Review:** Followed `CONTRIBUTING.md`: ran `python -m ruff check .` (all checks passed) and the full test suite before pushing.
 
-**Evaluate:** Will manually run the exported script after the fix to confirm it executes correctly, in addition to the automated test.
+**Evaluate:** Manually ran the exported script after the fix (`python train.py`) to confirm it executes correctly — it now progresses past parsing and fails only with a `FileNotFoundError` on the placeholder path, as expected. Also added an automated regression test.
 
 ---
 
 ## Testing Strategy
 
-*To be completed in Phase III, once the environment is set up and the fix is implemented.* Planned: extend `tests/test_v040_features.py` to cover path normalization for Windows-style and space-containing paths, and confirm `pytest tests/ -v` and `ruff check .` both pass.
+Added `test_export_windows_path_produces_valid_python` to `tests/test_v040_features.py`, which:
+- Exports a model using a genuine Windows-style backslash path (no manual escaping)
+- Uses `compile()` on the generated script to confirm it's valid Python source
+- Asserts the `DATA_PATH` line was written using `repr()` for safe escaping
+
+Ran the full suite (`python -m pytest tests/ -v`) after the fix: **52 passed, 4 skipped** (skips are optional XGBoost/LightGBM, unrelated to this change). Also ran `python -m ruff check .`: all checks passed.
 
 ---
 
 ## Implementation Notes
 
-*To be filled in during Phase III.*
+The fix was a one-line change in `breezeml/export.py`, inside `export_code()`:
+
+**Before:**
+```python
+lines.append(f'DATA_PATH = "{data_path}"')
+```
+
+**After:**
+```python
+lines.append(f"DATA_PATH = {data_path!r}")
+```
+
+Using `{data_path!r}` calls Python's built-in `repr()` on the path, which automatically produces a properly escaped string literal regardless of OS — no need for manual path normalization or `pathlib` conversion. This was simpler than the original plan (which considered `pathlib.Path(...).as_posix()`), since `repr()` handles the escaping directly without changing the path's actual format.
+
+Manually verified: exporting with `data_path=r"C:\Users\College\data.csv"` previously produced a `train.py` that failed with `SyntaxError: (unicode error) 'unicodeescape' codec can't decode bytes... truncated \UXXXXXXXX escape`. After the fix, the same export produces a script that parses and runs correctly (fails only on `FileNotFoundError` for the placeholder path, as expected).
+
+### Branch
+https://github.com/jenishasubedi05/breezeml/tree/fix-issue-10
 
 ---
 
