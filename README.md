@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Jenisha Subedi
 **Issue:** https://github.com/venomez-viper/breezeml/issues/10
-**Status:** Phase III COMPLETED
+**Status:** Phase IV COMPLETED
 
 ---
 
@@ -134,24 +134,22 @@ Manually verified: exporting with `data_path=r"C:\Users\College\data.csv"` previ
 
 ### Branch
 https://github.com/jenishasubedi05/breezeml/tree/fix-issue-10
+## 
+Pull Request
+**PR Link:** https://github.com/venomez-viper/breezeml/pull/15
 
----
-
-## Pull Request
-
-**PR Link:** *Not yet submitted planned for Phase IV.*
-
-**PR Description:** *To be written once implementation is complete.*
-
-**Status:** Not started
-
+**PR Description:**
+This PR fixes `export()` so Windows-style file paths are safely embedded in the generated standalone training script. Previously, a path like `C:\Users\name\data.csv` was written directly into the generated Python source, causing a `SyntaxError` when the exported script was run. The fix replaces manual quote-wrapping with Python's built-in `repr()`, which safely escapes backslashes regardless of OS. A regression test was added to confirm exported scripts are valid Python for Windows-style paths. Closes #10.
+**Maintainer Feedback:**
+- PR opened and CI checks (Python 3.9–3.13) are running as of submission. Left a comment tagging @venomez-viper requesting a review. No feedback received yet.
+**Status:** Awaiting review
 ---
 
 ## Learnings & Reflections
 
-[To be filled upon completion]
+This contribution taught me a lot about how Python handles string escaping under the hood — specifically why `repr()` is the safer default any time you're generating source code as text rather than manually wrapping values in quotes. I also learned a surprising amount about Windows-specific development friction (PATH issues with pip-installed scripts, needing `python -m` prefixes) just from setting up the environment, which will save me time on future contributions.
 
----
+The most valuable part of the process was writing the regression test *before* considering the work done — the existing test suite had a similar export test, but it worked around the bug by converting paths to forward slashes before testing, so it never actually caught this issue. Writing a test that exercises the exact failure condition (a genuine Windows-style path) was the difference between "looks fixed" and "verifiably fixed."
 
 ## Resources Used
 
